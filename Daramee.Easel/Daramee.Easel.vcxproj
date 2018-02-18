@@ -88,7 +88,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>EAGEL_DLL;EAGEL_D3D11;EAGEL_D3D12;EAGEL_OPENGL;EAGEL_VULKAN</PreprocessorDefinitions>
+      <PreprocessorDefinitions>EASEL_DLL;EASEL_D3D11;EASEL_D3D12;EASEL_OPENGL;EASEL_VULKAN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
@@ -101,7 +101,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>EAGEL_DLL;EAGEL_D3D11;EAGEL_D3D12;EAGEL_OPENGL;EAGEL_VULKAN</PreprocessorDefinitions>
+      <PreprocessorDefinitions>EASEL_DLL;EASEL_D3D11;EASEL_D3D12;EASEL_OPENGL;EASEL_VULKAN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
@@ -116,7 +116,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>EAGEL_DLL;EAGEL_D3D11;EAGEL_D3D12;EAGEL_OPENGL;EAGEL_VULKAN</PreprocessorDefinitions>
+      <PreprocessorDefinitions>EASEL_DLL;EASEL_D3D11;EASEL_D3D12;EASEL_OPENGL;EASEL_VULKAN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
@@ -133,7 +133,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>EAGEL_DLL;EAGEL_D3D11;EAGEL_D3D12;EAGEL_OPENGL;EAGEL_VULKAN</PreprocessorDefinitions>
+      <PreprocessorDefinitions>EASEL_DLL;EASEL_D3D11;EASEL_D3D12;EASEL_OPENGL;EASEL_VULKAN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>

@@ -1,11 +1,13 @@
 #include "easel.h"
 
-#if EAGEL_D3D11
+#if EASEL_D3D11
 
 #include <atlbase.h>
 #include <d3dcompiler.h>
+#include <wincodec.h>
 #pragma comment ( lib, "d3d11.lib" )
 #pragma comment ( lib, "d3dcompiler.lib" )
+#pragma comment ( lib, "WindowsCodecs.lib" )
 
 #include <string>
 #include <sstream>
@@ -156,12 +158,12 @@ ID3D11ComputeShader * __egGetShader ( const EGMACRO * macro )
 	}
 	return g_shadersD3D11.at ( hash );
 }
-ID3D11SamplerState * __egGetSamplerState ( EAGEL_SAMPLING sampling )
+ID3D11SamplerState * __egGetSamplerState ( EASEL_SAMPLING sampling )
 {
 	D3D11_SAMPLER_DESC samplerDesc;
 	switch ( sampling )
 	{
-		case EAGEL_SAMPLING_NEAREST:
+		case EASEL_SAMPLING_NEAREST:
 			if ( g_resizeSamplerNearest == nullptr )
 			{
 				ZeroMemory ( &samplerDesc, sizeof ( D3D11_SAMPLER_DESC ) );
@@ -178,7 +180,7 @@ ID3D11SamplerState * __egGetSamplerState ( EAGEL_SAMPLING sampling )
 			}
 			return g_resizeSamplerNearest;
 
-		case EAGEL_SAMPLING_LINEAR:
+		case EASEL_SAMPLING_LINEAR:
 			if ( g_resizeSamplerLinear == nullptr )
 			{
 				ZeroMemory ( &samplerDesc, sizeof ( D3D11_SAMPLER_DESC ) );
@@ -196,6 +198,35 @@ ID3D11SamplerState * __egGetSamplerState ( EAGEL_SAMPLING sampling )
 			return g_resizeSamplerLinear;
 
 		default: return nullptr;
+	}
+}
+WICPixelFormatGUID __esConvertPixelFormatGUID ( DXGI_FORMAT format )
+{
+	switch ( format )
+	{
+		case DXGI_FORMAT_R32G32B32A32_FLOAT:
+		case DXGI_FORMAT_R32G32B32A32_TYPELESS:
+			return GUID_WICPixelFormat128bppRGBAFloat;
+		case DXGI_FORMAT_R16G16B16A16_FLOAT: return GUID_WICPixelFormat64bppRGBAHalf;
+		case DXGI_FORMAT_R16G16B16A16_UNORM: return GUID_WICPixelFormat64bppRGBA;
+		case DXGI_FORMAT_R8G8B8A8_UNORM:
+		case DXGI_FORMAT_R8G8B8A8_TYPELESS:
+			return GUID_WICPixelFormat32bppRGBA;
+		case DXGI_FORMAT_B8G8R8A8_UNORM:
+		case DXGI_FORMAT_B8G8R8A8_TYPELESS:
+			return GUID_WICPixelFormat32bppBGRA;
+		case DXGI_FORMAT_B8G8R8X8_UNORM:
+		case DXGI_FORMAT_B8G8R8X8_TYPELESS:
+			return GUID_WICPixelFormat32bppBGR;
+		case DXGI_FORMAT_R10G10B10_XR_BIAS_A2_UNORM: return GUID_WICPixelFormat32bppRGBA1010102XR;
+		case DXGI_FORMAT_R10G10B10A2_UNORM: return GUID_WICPixelFormat32bppRGBA1010102;
+		case DXGI_FORMAT_B5G5R5A1_UNORM: return GUID_WICPixelFormat16bppBGRA5551;
+		case DXGI_FORMAT_B5G6R5_UNORM: return GUID_WICPixelFormat16bppBGR565;
+		case DXGI_FORMAT_R32_FLOAT: return GUID_WICPixelFormat32bppGrayFloat;
+		case DXGI_FORMAT_R16_FLOAT: return GUID_WICPixelFormat16bppGrayHalf;
+		case DXGI_FORMAT_R16_UNORM: return GUID_WICPixelFormat16bppGray;
+		case DXGI_FORMAT_R8_UNORM: return GUID_WICPixelFormat8bppGray;
+		default: return GUID_WICPixelFormatUndefined;
 	}
 }
 
@@ -221,11 +252,11 @@ inline void __egResetComputeShaderInContextD3D11 ()
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-EAGELERR EAGEL_DLL egInitializeD3D11 ( ID3D11Device * d3dDevice, unsigned processingUnit )
+EASELERR EASEL_DLL esInitializeD3D11 ( ID3D11Device * d3dDevice, unsigned processingUnit )
 {
 	g_processingUnitD3D11 = processingUnit;
 	if ( g_processingUnitD3D11 > 256 )
-		return EAGELERR_FAILED_INITIALIZE;
+		return EASELERR_FAILED_INITIALIZE;
 
 	if ( d3dDevice )
 	{
@@ -234,13 +265,17 @@ EAGELERR EAGEL_DLL egInitializeD3D11 ( ID3D11Device * d3dDevice, unsigned proces
 	}
 	else
 	{
+		DWORD createFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+#if defined ( DEBUG ) || defined ( _DEBUG )
+		createFlags |= D3D11_CREATE_DEVICE_DEBUG;
+#endif
 		if ( FAILED ( D3D11CreateDevice ( nullptr, D3D_DRIVER_TYPE_HARDWARE, 0,
-			D3D11_CREATE_DEVICE_DEBUG, nullptr, 0, D3D11_SDK_VERSION,
+			createFlags, nullptr, 0, D3D11_SDK_VERSION,
 			&g_d3dDevice, nullptr, &g_immediateContext ) ) )
-			return EAGELERR_FAILED_INITIALIZE;
+			return EASELERR_FAILED_INITIALIZE;
 	}
 
-	return EAGELERR_SUCCEED;
+	return EASELERR_SUCCEED;
 }
 
 #if defined ( DEBUG ) || defined ( _DEBUG )
@@ -250,7 +285,7 @@ EAGELERR EAGEL_DLL egInitializeD3D11 ( ID3D11Device * d3dDevice, unsigned proces
 #pragma comment ( lib, "dxguid.lib" )
 #endif
 
-void EAGEL_DLL egUninitializeD3D11 ()
+void EASEL_DLL esUninitializeD3D11 ()
 {
 	for ( auto i = g_uavsForTexture2D.begin (); i != g_uavsForTexture2D.end (); ++i )
 		i->second->Release ();
@@ -282,22 +317,201 @@ void EAGEL_DLL egUninitializeD3D11 ()
 #endif
 }
 
-EAGELERR EAGEL_DLL egGetD3D11Device ( ID3D11Device ** result )
+EASELERR EASEL_DLL esGetD3D11Device ( ID3D11Device ** result )
 {
 	if ( result == nullptr )
-		return EAGELERR_ARGUMENT_IS_NULL;
+		return EASELERR_ARGUMENT_IS_NULL;
 	if ( g_d3dDevice == nullptr )
-		return EAGELERR_DEVICE_IS_NULL;
+		return EASELERR_DEVICE_IS_NULL;
 	*result = g_d3dDevice;
 	g_d3dDevice->AddRef ();
-	return EAGELERR_SUCCEED;
+	return EASELERR_SUCCEED;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-EAGELERR EAGEL_DLL egDoFiltering ( ID3D11Texture2D * destination, ID3D11Texture2D * source, const EAGEL_FILTER & filter )
+EASELERR EASEL_DLL esLoadTexture2DFromStream ( ID3D11Device * d3dDevice,
+	IStream * stream, DXGI_FORMAT format, ID3D11Texture2D ** result )
+{
+	CComPtr<IWICImagingFactory> imagingFactory;
+	if ( FAILED ( CoCreateInstance ( CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER,
+		IID_IWICImagingFactory, ( LPVOID* ) &imagingFactory ) ) )
+		return EASELERR_FAILED_INITIALIZE;
+
+	CComPtr<IWICBitmapDecoder> bitmapDecoder;
+	if ( FAILED ( imagingFactory->CreateDecoderFromStream ( stream, nullptr,
+		WICDecodeMetadataCacheOnDemand, &bitmapDecoder ) ) )
+		return EASELERR_FAILED_INITIALIZE;
+
+	CComPtr<IWICBitmapFrameDecode> bitmapFrame;
+	if ( FAILED ( bitmapDecoder->GetFrame ( 0, &bitmapFrame ) ) )
+		return EASELERR_FAILED_INITIALIZE;
+
+	CComPtr<IWICFormatConverter> formatConverter;
+	if ( FAILED ( imagingFactory->CreateFormatConverter ( &formatConverter ) ) )
+		return EASELERR_FAILED_INITIALIZE;
+	if ( FAILED ( formatConverter->Initialize ( bitmapFrame,
+		__esConvertPixelFormatGUID ( format ),
+		WICBitmapDitherTypeNone, nullptr, 0, WICBitmapPaletteTypeCustom ) ) )
+		return EASELERR_FAILED_INITIALIZE;
+
+	D3D11_TEXTURE2D_DESC texDesc = { 0, };
+	texDesc.ArraySize = 1;
+	texDesc.MipLevels = 1;
+	texDesc.Usage = D3D11_USAGE_DEFAULT;
+	texDesc.CPUAccessFlags = 0;
+	bitmapFrame->GetSize ( &texDesc.Width, &texDesc.Height );
+	texDesc.Format = format;
+	texDesc.SampleDesc.Count = 1;
+	texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+
+	byte * copyMemory = new byte [ texDesc.Width * texDesc.Height * 4 ];
+	if ( FAILED ( formatConverter->CopyPixels ( nullptr,
+		texDesc.Width * 4,
+		texDesc.Width * texDesc.Height * 4,
+		copyMemory ) ) )
+	{
+		delete [] copyMemory;
+		return EASELERR_FAILED_INITIALIZE;
+	}
+	
+	if ( d3dDevice == nullptr )
+		d3dDevice = g_d3dDevice;
+
+	D3D11_SUBRESOURCE_DATA initialData = { 0, };
+	initialData.pSysMem = copyMemory;
+	initialData.SysMemPitch = texDesc.Width * 4;
+	initialData.SysMemSlicePitch = texDesc.Width * 4 * texDesc.Height;
+	if ( FAILED ( d3dDevice->CreateTexture2D ( &texDesc, &initialData, result ) ) )
+	{
+		delete [] copyMemory;
+		return EASELERR_FAILED_INITIALIZE;
+	}
+
+	delete [] copyMemory;
+
+	return EASELERR_SUCCEED;
+}
+
+EASELERR EASEL_DLL esLoadTexture2DFromFile ( ID3D11Device * d3dDevice,
+	LPCTSTR filename, DXGI_FORMAT format, ID3D11Texture2D ** result )
+{
+	CComPtr<IStream> stream;
+	HRESULT hr;
+	if ( FAILED ( hr = SHCreateStreamOnFile ( filename, STGM_READ, &stream ) ) )
+		return EASELERR_FILE_IS_NOT_FOUND;
+	return esLoadTexture2DFromStream ( d3dDevice, stream, format, result );
+}
+
+EASELERR EASEL_DLL esCreateCompatibleTexture2D ( ID3D11Device * d3dDevice, ID3D11Texture2D * original, ID3D11Texture2D ** result )
+{
+	if ( d3dDevice == nullptr )
+		d3dDevice = g_d3dDevice;
+
+	D3D11_TEXTURE2D_DESC texDesc;
+	original->GetDesc ( &texDesc );
+
+	if ( FAILED ( d3dDevice->CreateTexture2D ( &texDesc, nullptr, result ) ) )
+		return EASELERR_FAILED_INITIALIZE;
+
+	return EASELERR_SUCCEED;
+}
+
+EASELERR EASEL_DLL esCreateCompatibleScaleTexture2D ( ID3D11Device * d3dDevice, ID3D11Texture2D * original, int scale, ID3D11Texture2D ** result )
+{
+	if ( d3dDevice == nullptr )
+		d3dDevice = g_d3dDevice;
+
+	D3D11_TEXTURE2D_DESC texDesc;
+	original->GetDesc ( &texDesc );
+	texDesc.Width = ( UINT ) ( texDesc.Width * ( scale / 100.0f ) );
+	texDesc.Height = ( UINT ) ( texDesc.Height * ( scale / 100.0f ) );
+
+	if ( FAILED ( d3dDevice->CreateTexture2D ( &texDesc, nullptr, result ) ) )
+		return EASELERR_FAILED_INITIALIZE;
+
+	return EASELERR_SUCCEED;
+}
+
+EASELERR EASEL_DLL esSaveTexture2DToStream ( ID3D11Device * d3dDevice, IStream * stream, ID3D11Texture2D * target )
+{
+	CComPtr<IWICImagingFactory> imagingFactory;
+	if ( FAILED ( CoCreateInstance ( CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER,
+		IID_IWICImagingFactory, ( LPVOID* ) &imagingFactory ) ) )
+		return EASELERR_FAILED_INITIALIZE;
+
+	CComPtr<IWICBitmapEncoder> bitmapEncoder;
+	if ( FAILED ( imagingFactory->CreateEncoder ( GUID_ContainerFormatPng,
+		nullptr, &bitmapEncoder ) ) )
+		return EASELERR_FAILED_INITIALIZE;
+
+	if ( FAILED ( bitmapEncoder->Initialize ( stream, WICBitmapEncoderNoCache ) ) )
+		return EASELERR_FAILED_INITIALIZE;
+
+	CComPtr<IWICBitmapFrameEncode> frameEncode;
+	CComPtr<IPropertyBag2> encoderOptions;
+	if ( FAILED ( bitmapEncoder->CreateNewFrame ( &frameEncode, &encoderOptions ) ) )
+		return EASELERR_FAILED_INITIALIZE;
+	if ( FAILED ( frameEncode->Initialize ( nullptr ) ) )
+		return EASELERR_FAILED_INITIALIZE;
+
+	D3D11_TEXTURE2D_DESC texDesc;
+	target->GetDesc ( &texDesc );
+
+	if ( FAILED ( frameEncode->SetResolution ( 96, 96 ) ) )
+		return EASELERR_FAILED_INITIALIZE;
+	if ( FAILED ( frameEncode->SetSize ( texDesc.Width, texDesc.Height ) ) )
+		return EASELERR_FAILED_INITIALIZE;
+	GUID encodeGuid = __esConvertPixelFormatGUID ( texDesc.Format );
+	if ( FAILED ( frameEncode->SetPixelFormat ( &encodeGuid ) ) )
+		return EASELERR_FAILED_INITIALIZE;
+
+	if ( d3dDevice == nullptr )
+		d3dDevice = g_d3dDevice;
+
+	texDesc.BindFlags = 0;
+	texDesc.Usage = D3D11_USAGE_STAGING;
+	texDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+	CComPtr<ID3D11Texture2D> lockTexture;
+	if ( FAILED ( d3dDevice->CreateTexture2D ( &texDesc, nullptr, &lockTexture ) ) )
+		return EASELERR_FAILED_INITIALIZE;
+	CComPtr<ID3D11DeviceContext> immediateContext;
+	d3dDevice->GetImmediateContext ( &immediateContext );
+	immediateContext->CopyResource ( lockTexture, target );
+
+	D3D11_MAPPED_SUBRESOURCE mappedResource;
+	if ( FAILED ( immediateContext->Map ( lockTexture, 0, D3D11_MAP_READ, 0, &mappedResource ) ) )
+		return EASELERR_FAILED_INITIALIZE;
+	if ( FAILED ( frameEncode->WritePixels ( texDesc.Height,
+		texDesc.Width * 4,
+		texDesc.Width * texDesc.Height * 4,
+		( BYTE* ) mappedResource.pData ) ) )
+		return EASELERR_FAILED_INITIALIZE;
+	immediateContext->Unmap ( lockTexture, 0 );
+
+	if ( FAILED ( frameEncode->Commit () ) )
+		return EASELERR_FAILED_INITIALIZE;
+	if ( FAILED ( bitmapEncoder->Commit () ) )
+		return EASELERR_FAILED_INITIALIZE;
+
+	return EASELERR_SUCCEED;
+}
+
+EASELERR EASEL_DLL esSaveTexture2DToFile ( ID3D11Device * d3dDevice, LPCTSTR filename, ID3D11Texture2D * target )
+{
+	CComPtr<IStream> stream;
+	if ( FAILED ( SHCreateStreamOnFile ( filename, STGM_WRITE | STGM_CREATE, &stream ) ) )
+		return EASELERR_FILE_IS_NOT_FOUND;
+	return esSaveTexture2DToStream ( d3dDevice, stream, target );
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+EASELERR EASEL_DLL esDoFiltering ( ID3D11Texture2D * destination, ID3D11Texture2D * source, const EASEL_FILTER & filter )
 {
 	__egResetComputeShaderInContextD3D11 ();
 
@@ -307,31 +521,31 @@ EAGELERR EAGEL_DLL egDoFiltering ( ID3D11Texture2D * destination, ID3D11Texture2
 
 	if ( ( destDesc.BindFlags & D3D11_BIND_UNORDERED_ACCESS ) == 0
 		|| ( srcDesc.BindFlags & D3D11_BIND_SHADER_RESOURCE ) == 0 )
-		return EAGELERR_UNAUTHORIZED_OBJECT;
+		return EASELERR_UNAUTHORIZED_OBJECT;
 	if ( destDesc.Width != srcDesc.Width || destDesc.Height != srcDesc.Height )
-		return EAGELERR_INVALID_OBJECT;
+		return EASELERR_INVALID_OBJECT;
 
 	EGMACRO macro ( g_processingUnitD3D11, srcDesc.Format, destDesc.Format, "Filtering" );
 	ID3D11ComputeShader * computeShader = __egGetShader ( &macro );
-	if ( computeShader == nullptr ) return EAGELERR_SHADER_COMPILE_ERROR;
+	if ( computeShader == nullptr ) return EASELERR_SHADER_COMPILE_ERROR;
 
 	ID3D11ShaderResourceView * srv = __egGetShaderResourceView ( source );
-	if ( srv == nullptr ) return EAGELERR_INVALID_OBJECT;
+	if ( srv == nullptr ) return EASELERR_INVALID_OBJECT;
 	
 	ID3D11UnorderedAccessView * uav = __egGetUnorderedAccessView ( destination );
-	if ( uav == nullptr ) return EAGELERR_INVALID_OBJECT;
+	if ( uav == nullptr ) return EASELERR_INVALID_OBJECT;
 
 	if ( g_filteringConstantsD3D11 == nullptr )
 	{
 		D3D11_BUFFER_DESC constantBufferDesc = { 0, };
-		constantBufferDesc.ByteWidth = sizeof ( EAGEL_FILTER );
+		constantBufferDesc.ByteWidth = sizeof ( EASEL_FILTER );
 		constantBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 		constantBufferDesc.Usage = D3D11_USAGE_DEFAULT;
 
 		if ( FAILED ( g_d3dDevice->CreateBuffer ( &constantBufferDesc, nullptr, &g_filteringConstantsD3D11 ) ) )
-			return EAGELERR_FAILED_INITIALIZE;
+			return EASELERR_FAILED_INITIALIZE;
 	}
-	g_immediateContext->UpdateSubresource ( g_filteringConstantsD3D11, 0, nullptr, &filter, sizeof ( EAGEL_FILTER ), 0 );
+	g_immediateContext->UpdateSubresource ( g_filteringConstantsD3D11, 0, nullptr, &filter, sizeof ( EASEL_FILTER ), 0 );
 
 	ID3D11Buffer * constantBuffer = g_filteringConstantsD3D11;
 
@@ -344,10 +558,10 @@ EAGELERR EAGEL_DLL egDoFiltering ( ID3D11Texture2D * destination, ID3D11Texture2
 		( UINT ) ceill ( ( float ) destDesc.Height / g_processingUnitD3D11 ),
 		1 );
 
-	return EAGELERR_SUCCEED;
+	return EASELERR_SUCCEED;
 }
 
-EAGELERR EAGEL_DLL egDoCopyResource ( ID3D11Texture2D * destination, ID3D11Texture2D * source )
+EASELERR EASEL_DLL esDoCopyResource ( ID3D11Texture2D * destination, ID3D11Texture2D * source )
 {
 	__egResetComputeShaderInContextD3D11 ();
 
@@ -357,9 +571,9 @@ EAGELERR EAGEL_DLL egDoCopyResource ( ID3D11Texture2D * destination, ID3D11Textu
 
 	if ( ( destDesc.BindFlags & D3D11_BIND_UNORDERED_ACCESS ) == 0
 		|| ( srcDesc.BindFlags & D3D11_BIND_SHADER_RESOURCE ) == 0 )
-		return EAGELERR_UNAUTHORIZED_OBJECT;
+		return EASELERR_UNAUTHORIZED_OBJECT;
 	if ( destDesc.Width != srcDesc.Width || destDesc.Height != srcDesc.Height )
-		return EAGELERR_INVALID_OBJECT;
+		return EASELERR_INVALID_OBJECT;
 
 	if ( destDesc.Format == srcDesc.Format )
 		g_immediateContext->CopyResource ( destination, source );
@@ -370,17 +584,17 @@ EAGELERR EAGEL_DLL egDoCopyResource ( ID3D11Texture2D * destination, ID3D11Textu
 			target = 1;
 		else if ( destDesc.Format == DXGI_FORMAT_R32G32B32A32_FLOAT )
 			target = 2;
-		else return EAGELERR_UNSUPPORT_FORMAT;
+		else return EASELERR_UNSUPPORT_FORMAT;
 
 		EGMACRO macro ( g_processingUnitD3D11, srcDesc.Format, destDesc.Format, "Copy" );
 		ID3D11ComputeShader * computeShader = __egGetShader ( &macro );
-		if ( computeShader == nullptr ) return EAGELERR_SHADER_COMPILE_ERROR;
+		if ( computeShader == nullptr ) return EASELERR_SHADER_COMPILE_ERROR;
 
 		ID3D11ShaderResourceView * srv = __egGetShaderResourceView ( source );
-		if ( srv == nullptr ) return EAGELERR_INVALID_OBJECT;
+		if ( srv == nullptr ) return EASELERR_INVALID_OBJECT;
 
 		ID3D11UnorderedAccessView * uav = __egGetUnorderedAccessView ( destination );
-		if ( uav == nullptr ) return EAGELERR_INVALID_OBJECT;
+		if ( uav == nullptr ) return EASELERR_INVALID_OBJECT;
 
 		g_immediateContext->CSSetShader ( computeShader, nullptr, 0 );
 		g_immediateContext->CSSetShaderResources ( 0, 1, &srv );
@@ -391,10 +605,10 @@ EAGELERR EAGEL_DLL egDoCopyResource ( ID3D11Texture2D * destination, ID3D11Textu
 			1 );
 	}
 
-	return EAGELERR_SUCCEED;
+	return EASELERR_SUCCEED;
 }
 
-EAGELERR EAGEL_DLL egDoResize ( ID3D11Texture2D * destination, ID3D11Texture2D * source, EAGEL_SAMPLING sampling )
+EASELERR EASEL_DLL esDoResize ( ID3D11Texture2D * destination, ID3D11Texture2D * source, EASEL_SAMPLING sampling )
 {
 	__egResetComputeShaderInContextD3D11 ();
 
@@ -404,22 +618,22 @@ EAGELERR EAGEL_DLL egDoResize ( ID3D11Texture2D * destination, ID3D11Texture2D *
 
 	if ( ( destDesc.BindFlags & D3D11_BIND_UNORDERED_ACCESS ) == 0
 		|| ( srcDesc.BindFlags & D3D11_BIND_SHADER_RESOURCE ) == 0 )
-		return EAGELERR_UNAUTHORIZED_OBJECT;
+		return EASELERR_UNAUTHORIZED_OBJECT;
 	if ( destDesc.Width == srcDesc.Width && destDesc.Height == srcDesc.Height )
-		return EAGELERR_INVALID_OBJECT;
+		return EASELERR_INVALID_OBJECT;
 
 	EGMACRO macro ( g_processingUnitD3D11, srcDesc.Format, destDesc.Format, "Resize" );
 	ID3D11ComputeShader * computeShader = __egGetShader ( &macro );
-	if ( computeShader == nullptr ) return EAGELERR_SHADER_COMPILE_ERROR;
+	if ( computeShader == nullptr ) return EASELERR_SHADER_COMPILE_ERROR;
 
 	ID3D11ShaderResourceView * srv = __egGetShaderResourceView ( source );
-	if ( srv == nullptr ) return EAGELERR_INVALID_OBJECT;
+	if ( srv == nullptr ) return EASELERR_INVALID_OBJECT;
 
 	ID3D11UnorderedAccessView * uav = __egGetUnorderedAccessView ( destination );
-	if ( uav == nullptr ) return EAGELERR_INVALID_OBJECT;
+	if ( uav == nullptr ) return EASELERR_INVALID_OBJECT;
 
 	ID3D11SamplerState * samplerState = __egGetSamplerState ( sampling );
-	if ( samplerState == nullptr ) return EAGELERR_INVALID_OBJECT;
+	if ( samplerState == nullptr ) return EASELERR_INVALID_OBJECT;
 
 	g_immediateContext->CSSetShader ( computeShader, nullptr, 0 );
 	g_immediateContext->CSSetShaderResources ( 0, 1, &srv );
@@ -430,10 +644,10 @@ EAGELERR EAGEL_DLL egDoResize ( ID3D11Texture2D * destination, ID3D11Texture2D *
 		( UINT ) ceill ( ( float ) destDesc.Height / g_processingUnitD3D11 ),
 		1 );
 
-	return EAGELERR_SUCCEED;
+	return EASELERR_SUCCEED;
 }
 
-EAGELERR EAGEL_DLL egDoHistogramEqualization ( ID3D11Texture2D * destination, ID3D11Texture2D * source, const int histogram [ 256 ] )
+EASELERR EASEL_DLL esDoHistogramEqualization ( ID3D11Texture2D * destination, ID3D11Texture2D * source, const int histogram [ 256 ] )
 {
 	D3D11_TEXTURE2D_DESC destDesc, srcDesc;
 	destination->GetDesc ( &destDesc );
@@ -449,13 +663,13 @@ EAGELERR EAGEL_DLL egDoHistogramEqualization ( ID3D11Texture2D * destination, ID
 		constantBufferDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
 
 		if ( FAILED ( g_d3dDevice->CreateBuffer ( &constantBufferDesc, nullptr, &g_histogramBufferD3D11 ) ) )
-			return EAGELERR_FAILED_INITIALIZE;
+			return EASELERR_FAILED_INITIALIZE;
 
 		if ( FAILED ( g_d3dDevice->CreateShaderResourceView ( g_histogramBufferD3D11, nullptr, &g_histogramSRV ) ) )
-			return EAGELERR_FAILED_INITIALIZE;
+			return EASELERR_FAILED_INITIALIZE;
 
 		if ( FAILED ( g_d3dDevice->CreateUnorderedAccessView ( g_histogramBufferD3D11, nullptr, &g_histogramUAV ) ) )
-			return EAGELERR_FAILED_INITIALIZE;
+			return EASELERR_FAILED_INITIALIZE;
 	}
 
 	int histogram_custom [ 256 ];
@@ -463,11 +677,11 @@ EAGELERR EAGEL_DLL egDoHistogramEqualization ( ID3D11Texture2D * destination, ID
 	{
 		EGMACRO macro ( g_processingUnitD3D11, DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN, "GetHistogram" );
 		ID3D11ComputeShader * computeShader = __egGetShader ( &macro );
-		if ( computeShader == nullptr ) return EAGELERR_SHADER_COMPILE_ERROR;
+		if ( computeShader == nullptr ) return EASELERR_SHADER_COMPILE_ERROR;
 
 		g_immediateContext->CSSetShader ( computeShader, nullptr, 0 );
 		ID3D11ShaderResourceView * srv = __egGetShaderResourceView ( source );
-		if ( srv == nullptr ) return EAGELERR_INVALID_OBJECT;
+		if ( srv == nullptr ) return EASELERR_INVALID_OBJECT;
 		ID3D11UnorderedAccessView * uav = g_histogramUAV;
 		g_immediateContext->CSSetUnorderedAccessViews ( 1, 0, &uav, nullptr );
 		g_immediateContext->Dispatch (
@@ -483,9 +697,9 @@ EAGELERR EAGEL_DLL egDoHistogramEqualization ( ID3D11Texture2D * destination, ID
 		histogram = histogram_custom;
 	}
 
+	// TODO
 
-
-	return EAGELERR_SUCCEED;
+	return EASELERR_SUCCEED;
 }
 
 #endif
