@@ -68,6 +68,14 @@ extern "C"
 		EASEL_SAMPLING_LINEAR,
 	};
 
+	enum EASEL_DLL EASEL_OPERATOR
+	{
+		EASEL_OPERATOR_ADD,
+		EASEL_OPERATOR_SUBTRACT,
+		EASEL_OPERATOR_MULTIPLY,
+		EASEL_OPERATOR_DIVIDE,
+	};
+
 #ifdef EASEL_D3D11
 	EASELERR EASEL_DLL esInitializeD3D11 ( ID3D11Device * d3dDevice = nullptr,
 		unsigned processingUnit = 16 );
@@ -102,6 +110,10 @@ extern "C"
 	EASELERR EASEL_DLL esDoHistogramEqualization (
 		ID3D11Texture2D * destination, ID3D11Texture2D * source,
 		const int histogram [ 256 ] = nullptr
+	);
+	EASELERR EASEL_DLL esDoArithmeticOperation (
+		ID3D11Texture2D * destination, ID3D11Texture2D * source, 
+		float color [ 4 ], EASEL_OPERATOR op
 	);
 #endif
 

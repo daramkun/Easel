@@ -7,26 +7,43 @@ cbuffer Filter : register ( b0 )
 	int4 filter_radius;
 	float4 filter [ 64 ];
 };
+cbuffer ArithmeticOperation : register ( b1 )
+{
+	float4 compute_color;
+	int compute_operator;
+};
 static float filter_array [ 256 ] = ( float [ 256 ] ) filter;
 SamplerState samplerState : register ( s0 );
-RWStructuredBuffer<int> histogram : register ( u0 );
+RWStructuredBuffer<int> histogram : register ( u1 );
 
 inline float4 RGB2YUV ( float4 rgb )
 {
+	const float4 RGB2Y = float4 ( +0.299, +0.587, +0.114, 0.0 );
+	const float4 RGB2U = float4 ( +0.596, -0.275, -0.321, 0.0 );
+	const float4 RGB2V = float4 ( +0.212, -0.523, +0.311, 0.0 );
+
 	return float4 (
-		0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b,
-		-0.147 * rgb.r - 0.289 * rgb.g + 0.436 * rgb.b,
-		0.615 * rgb.r - 0.515 * rgb.g - 0.100 * rgb.b,
+		dot ( rgb, RGB2Y ),
+		dot ( rgb, RGB2U ),
+		dot ( rgb, RGB2V ),
 		rgb.a
 	);
 }
-
+inline float RGB2Y ( float4 rgb )
+{
+	const float4 RGB2Y = float4 ( +0.299, +0.587, +0.114, 0.0 );
+	return dot ( rgb, RGB2Y );
+}
 inline float4 YUV2RGB ( float4 yuv )
 {
+	const float4 YUV2R = float4 ( +1.0, +0.956, +0.621, 0.0 );
+	const float4 YUV2G = float4 ( +1.0, -0.272, -0.647, 0.0 );
+	const float4 YUV2B = float4 ( +1.0, -1.107, +1.704, 0.0 );
+
 	return float4 (
-		yuv.r + 1.140 * yuv.b,
-		yuv.r - 0.395 * yuv.g - 0.581 * yuv.b,
-		yuv.r + 2.032 * yuv.g,
+		dot ( yuv, YUV2R ),
+		dot ( yuv, YUV2G ),
+		dot ( yuv, YUV2B ),
 		yuv.a
 	);
 }
@@ -86,16 +103,29 @@ void Resize ( uint3 groupId : SV_GroupID, uint3 dispatchThreadId : SV_DispatchTh
 [numthreads ( PROCESSINGUNIT, PROCESSINGUNIT, 1 )]
 void GetHistogram ( uint3 dispatchThreadId : SV_DispatchThreadID )
 {
-	float4 color = inputTexture.Load ( dispatchThreadId );
-	++histogram [ ( int ) ( RGB2YUV ( color ).r * 255 ) ];
+	int y = ( int ) ( RGB2Y ( inputTexture.Load ( dispatchThreadId ) ) * 255 );
+	InterlockedAdd ( histogram [ y ], 1 );
 }
 
 [numthreads ( PROCESSINGUNIT, PROCESSINGUNIT, 1 )]
 void HistogramEqualization ( uint3 dispatchThreadId : SV_DispatchThreadID )
 {
-	float4 color = inputTexture.Load ( dispatchThreadId );
-	float4 yuv = RGB2YUV ( color );
-	yuv.y = histogram [ yuv.y ];
+	float4 yuv = RGB2YUV ( inputTexture.Load ( dispatchThreadId ) );
+	yuv.r = histogram [ ( int ) ( yuv.r * 255 ) ] / 255.0f;
 	outputTexture [ dispatchThreadId.xy ] = YUV2RGB ( yuv );
+}
+
+[numthreads ( PROCESSINGUNIT, PROCESSINGUNIT, 1 )]
+void ArithmeticOperation ( uint3 dispatchThreadId : SV_DispatchThreadID )
+{
+	float4 color = inputTexture.Load ( dispatchThreadId );
+	if ( compute_operator == 0 )
+		outputTexture [ dispatchThreadId.xy ] = color + compute_color;
+	else if ( compute_operator == 1 )
+		outputTexture [ dispatchThreadId.xy ] = color - compute_color;
+	else if ( compute_operator == 2 )
+		outputTexture [ dispatchThreadId.xy ] = color * compute_color;
+	else if ( compute_operator == 3 )
+		outputTexture [ dispatchThreadId.xy ] = color / compute_color;
 }
 );

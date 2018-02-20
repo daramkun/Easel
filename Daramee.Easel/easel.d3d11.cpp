@@ -33,7 +33,9 @@ std::map<uint32_t, ID3D11ComputeShader *> g_shadersD3D11;
 
 ID3D11Buffer * g_filteringConstantsD3D11;
 ID3D11SamplerState * g_resizeSamplerNearest, * g_resizeSamplerLinear;
-ID3D11Buffer * g_histogramBufferD3D11;
+ID3D11Buffer * g_histogramBufferD3D11, * g_histogramCopyOnlyD3D11;
+struct ArithmeticOp { float r, g, b, a; int op; int reserved1, reserved2, reserved3; };
+ID3D11Buffer * g_arithmeticOpBufferD3D11;
 ID3D11ShaderResourceView * g_histogramSRV;
 ID3D11UnorderedAccessView * g_histogramUAV;
 
@@ -297,6 +299,9 @@ void EASEL_DLL esUninitializeD3D11 ()
 	SAFE_RELEASE ( g_resizeSamplerLinear );
 	SAFE_RELEASE ( g_resizeSamplerNearest );
 
+	SAFE_RELEASE ( g_arithmeticOpBufferD3D11 );
+
+	SAFE_RELEASE ( g_histogramCopyOnlyD3D11 );
 	SAFE_RELEASE ( g_histogramUAV );
 	SAFE_RELEASE ( g_histogramSRV );
 	SAFE_RELEASE ( g_histogramBufferD3D11 );
@@ -653,51 +658,147 @@ EASELERR EASEL_DLL esDoHistogramEqualization ( ID3D11Texture2D * destination, ID
 	destination->GetDesc ( &destDesc );
 	source->GetDesc ( &srcDesc );
 
+	if ( ( destDesc.BindFlags & D3D11_BIND_UNORDERED_ACCESS ) == 0
+		|| ( srcDesc.BindFlags & D3D11_BIND_SHADER_RESOURCE ) == 0 )
+		return EASELERR_UNAUTHORIZED_OBJECT;
+	if ( destDesc.Width != srcDesc.Width || destDesc.Height != srcDesc.Height )
+		return EASELERR_INVALID_OBJECT;
+
 	if ( g_histogramBufferD3D11 == nullptr )
 	{
-		D3D11_BUFFER_DESC constantBufferDesc = { 0, };
-		constantBufferDesc.StructureByteStride = sizeof ( int );
-		constantBufferDesc.ByteWidth = sizeof ( int ) * 256;
-		constantBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
-		constantBufferDesc.Usage = D3D11_USAGE_DEFAULT;
-		constantBufferDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+		D3D11_BUFFER_DESC bufferDesc = { 0, };
+		bufferDesc.StructureByteStride = sizeof ( int );
+		bufferDesc.ByteWidth = sizeof ( int ) * 256;
+		bufferDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+		bufferDesc.Usage = D3D11_USAGE_DEFAULT;
+		bufferDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
 
-		if ( FAILED ( g_d3dDevice->CreateBuffer ( &constantBufferDesc, nullptr, &g_histogramBufferD3D11 ) ) )
+		if ( FAILED ( g_d3dDevice->CreateBuffer ( &bufferDesc, nullptr, &g_histogramBufferD3D11 ) ) )
 			return EASELERR_FAILED_INITIALIZE;
-
 		if ( FAILED ( g_d3dDevice->CreateShaderResourceView ( g_histogramBufferD3D11, nullptr, &g_histogramSRV ) ) )
 			return EASELERR_FAILED_INITIALIZE;
-
 		if ( FAILED ( g_d3dDevice->CreateUnorderedAccessView ( g_histogramBufferD3D11, nullptr, &g_histogramUAV ) ) )
+			return EASELERR_FAILED_INITIALIZE;
+	}
+
+	if ( g_histogramCopyOnlyD3D11 == nullptr && histogram == nullptr )
+	{
+		D3D11_BUFFER_DESC bufferDesc = { 0, };
+		bufferDesc.StructureByteStride = sizeof ( int );
+		bufferDesc.ByteWidth = sizeof ( int ) * 256;
+		bufferDesc.Usage = D3D11_USAGE_STAGING;
+		bufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+		bufferDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+
+		if ( FAILED ( g_d3dDevice->CreateBuffer ( &bufferDesc, nullptr, &g_histogramCopyOnlyD3D11 ) ) )
 			return EASELERR_FAILED_INITIALIZE;
 	}
 
 	int histogram_custom [ 256 ];
 	if ( histogram == nullptr )
 	{
-		EGMACRO macro ( g_processingUnitD3D11, DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN, "GetHistogram" );
+		EGMACRO macro ( g_processingUnitD3D11, srcDesc.Format, DXGI_FORMAT_UNKNOWN, "GetHistogram" );
 		ID3D11ComputeShader * computeShader = __egGetShader ( &macro );
 		if ( computeShader == nullptr ) return EASELERR_SHADER_COMPILE_ERROR;
 
 		g_immediateContext->CSSetShader ( computeShader, nullptr, 0 );
 		ID3D11ShaderResourceView * srv = __egGetShaderResourceView ( source );
 		if ( srv == nullptr ) return EASELERR_INVALID_OBJECT;
+		g_immediateContext->CSSetShaderResources ( 0, 1, &srv );
 		ID3D11UnorderedAccessView * uav = g_histogramUAV;
-		g_immediateContext->CSSetUnorderedAccessViews ( 1, 0, &uav, nullptr );
+		g_immediateContext->CSSetUnorderedAccessViews ( 1, 1, &uav, nullptr );
 		g_immediateContext->Dispatch (
 			( UINT ) ceill ( ( float ) srcDesc.Width / g_processingUnitD3D11 ),
 			( UINT ) ceill ( ( float ) srcDesc.Height / g_processingUnitD3D11 ),
 			1 );
 
+		g_immediateContext->CopyResource ( g_histogramCopyOnlyD3D11, g_histogramBufferD3D11 );
+
 		D3D11_MAPPED_SUBRESOURCE subres;
-		g_immediateContext->Map ( g_histogramBufferD3D11, 0, D3D11_MAP_READ, 0, &subres );
-		// TODO
-		g_immediateContext->Unmap ( g_histogramBufferD3D11, 0 );
+		g_immediateContext->Map ( g_histogramCopyOnlyD3D11, 0, D3D11_MAP_READ, 0, &subres );
+		memcpy ( histogram_custom, subres.pData, sizeof ( int ) * 256 );
+		g_immediateContext->Unmap ( g_histogramCopyOnlyD3D11, 0 );
 
 		histogram = histogram_custom;
+
+		__egResetComputeShaderInContextD3D11 ();
 	}
 
 	// TODO
+	int pixelCount = srcDesc.Width * srcDesc.Height;
+	float aspect = 255.0f / pixelCount;
+
+	int equalization [ 256 ] = { 0, };
+	for ( int i = 0, sum = 0; i < 256; ++i )
+	{
+		sum += histogram [ i ];
+		equalization [ i ] = ( int ) round ( sum * aspect );
+	}
+
+	g_immediateContext->UpdateSubresource ( g_histogramBufferD3D11, 0, nullptr, equalization, sizeof ( int ) * 256, 0 );
+
+	EGMACRO macro ( g_processingUnitD3D11, srcDesc.Format, destDesc.Format, "HistogramEqualization" );
+	ID3D11ComputeShader * computeShader = __egGetShader ( &macro );
+	if ( computeShader == nullptr ) return EASELERR_SHADER_COMPILE_ERROR;
+
+	g_immediateContext->CSSetShader ( computeShader, nullptr, 0 );
+	ID3D11ShaderResourceView * srv = __egGetShaderResourceView ( source );
+	if ( srv == nullptr ) return EASELERR_INVALID_OBJECT;
+	g_immediateContext->CSSetShaderResources ( 0, 1, &srv );
+	ID3D11UnorderedAccessView * uav [ 2 ] = { __egGetUnorderedAccessView ( destination ), g_histogramUAV, };
+	if ( uav [ 0 ] == nullptr ) return EASELERR_INVALID_OBJECT;
+	g_immediateContext->CSSetUnorderedAccessViews ( 0, 2, uav, nullptr );
+	g_immediateContext->Dispatch (
+		( UINT ) ceill ( ( float ) srcDesc.Width / g_processingUnitD3D11 ),
+		( UINT ) ceill ( ( float ) srcDesc.Height / g_processingUnitD3D11 ),
+		1 );
+
+	return EASELERR_SUCCEED;
+}
+
+EASELERR EASEL_DLL esDoArithmeticOperation ( ID3D11Texture2D * destination, ID3D11Texture2D * source, float color [ 4 ], EASEL_OPERATOR op )
+{
+	D3D11_TEXTURE2D_DESC destDesc, srcDesc;
+	destination->GetDesc ( &destDesc );
+	source->GetDesc ( &srcDesc );
+
+	if ( ( destDesc.BindFlags & D3D11_BIND_UNORDERED_ACCESS ) == 0
+		|| ( srcDesc.BindFlags & D3D11_BIND_SHADER_RESOURCE ) == 0 )
+		return EASELERR_UNAUTHORIZED_OBJECT;
+	if ( destDesc.Width != srcDesc.Width || destDesc.Height != srcDesc.Height )
+		return EASELERR_INVALID_OBJECT;
+
+	if ( g_arithmeticOpBufferD3D11 == nullptr )
+	{
+		D3D11_BUFFER_DESC constantBufferDesc = { 0, };
+		constantBufferDesc.ByteWidth = sizeof ( ArithmeticOp );
+		constantBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+		constantBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+
+		if ( FAILED ( g_d3dDevice->CreateBuffer ( &constantBufferDesc, nullptr, &g_arithmeticOpBufferD3D11 ) ) )
+			return EASELERR_FAILED_INITIALIZE;
+	}
+
+	ArithmeticOp cc = { color [ 0 ], color [ 1 ], color [ 2 ], color [ 3 ], ( int ) op, 0, 0, 0 };
+	g_immediateContext->UpdateSubresource ( g_arithmeticOpBufferD3D11, 0, nullptr, &cc, sizeof ( cc ), 0 );
+
+	EGMACRO macro ( g_processingUnitD3D11, srcDesc.Format, destDesc.Format, "ArithmeticOperation" );
+	ID3D11ComputeShader * computeShader = __egGetShader ( &macro );
+	if ( computeShader == nullptr ) return EASELERR_SHADER_COMPILE_ERROR;
+
+	g_immediateContext->CSSetShader ( computeShader, nullptr, 0 );
+	ID3D11ShaderResourceView * srv = __egGetShaderResourceView ( source );
+	if ( srv == nullptr ) return EASELERR_INVALID_OBJECT;
+	g_immediateContext->CSSetShaderResources ( 0, 1, &srv );
+	ID3D11UnorderedAccessView * uav = __egGetUnorderedAccessView ( destination );
+	if ( uav == nullptr ) return EASELERR_INVALID_OBJECT;
+	g_immediateContext->CSSetUnorderedAccessViews ( 0, 1, &uav, nullptr );
+	ID3D11Buffer * constantBuffer = g_arithmeticOpBufferD3D11;
+	g_immediateContext->CSSetConstantBuffers ( 1, 1, &constantBuffer );
+	g_immediateContext->Dispatch (
+		( UINT ) ceill ( ( float ) srcDesc.Width / g_processingUnitD3D11 ),
+		( UINT ) ceill ( ( float ) srcDesc.Height / g_processingUnitD3D11 ),
+		1 );
 
 	return EASELERR_SUCCEED;
 }
