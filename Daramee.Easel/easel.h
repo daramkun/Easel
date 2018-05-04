@@ -62,18 +62,26 @@ extern "C"
 
 	} __declspec ( align ( 16 ) );
 
-	enum EASEL_DLL EASEL_SAMPLING
+	enum EASEL_SAMPLING
 	{
 		EASEL_SAMPLING_NEAREST,
 		EASEL_SAMPLING_LINEAR,
 	};
 
-	enum EASEL_DLL EASEL_OPERATOR
+	enum EASEL_OPERATOR
 	{
 		EASEL_OPERATOR_ADD,
 		EASEL_OPERATOR_SUBTRACT,
 		EASEL_OPERATOR_MULTIPLY,
 		EASEL_OPERATOR_DIVIDE,
+	};
+
+	enum EASEL_ROTATION
+	{
+		EASEL_ROTATION_0,
+		EASEL_ROTATION_90,
+		EASEL_ROTATION_180,
+		EASEL_ROTATION_270,
 	};
 
 #ifdef EASEL_D3D11
@@ -91,6 +99,8 @@ extern "C"
 		ID3D11Texture2D * original, ID3D11Texture2D ** result );
 	EASELERR EASEL_DLL esCreateCompatibleScaleTexture2D ( ID3D11Device * d3dDevice,
 		ID3D11Texture2D * original, int scale, ID3D11Texture2D ** result );
+	EASELERR EASEL_DLL esCreateCompatibleRotationTexture2D ( ID3D11Device * d3dDevice,
+		ID3D11Texture2D * original, EASEL_ROTATION rot, ID3D11Texture2D ** result );
 	EASELERR EASEL_DLL esSaveTexture2DToStream ( ID3D11Device * d3dDevice,
 		IStream * stream, ID3D11Texture2D * target );
 	EASELERR EASEL_DLL esSaveTexture2DToFile ( ID3D11Device * d3dDevice,
@@ -114,6 +124,10 @@ extern "C"
 	EASELERR EASEL_DLL esDoArithmeticOperation (
 		ID3D11Texture2D * destination, ID3D11Texture2D * source, 
 		float color [ 4 ], EASEL_OPERATOR op
+	);
+	EASELERR EASEL_DLL esDoRotation (
+		ID3D11Texture2D * destination, ID3D11Texture2D * source,
+		EASEL_ROTATION rot
 	);
 #endif
 

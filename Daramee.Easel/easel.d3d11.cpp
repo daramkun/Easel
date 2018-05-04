@@ -38,6 +38,8 @@ struct ArithmeticOp { float r, g, b, a; int op; int reserved1, reserved2, reserv
 ID3D11Buffer * g_arithmeticOpBufferD3D11;
 ID3D11ShaderResourceView * g_histogramSRV;
 ID3D11UnorderedAccessView * g_histogramUAV;
+struct RotationArgs { int rot, reserved1, reserved2, reserved3; };
+ID3D11Buffer * g_rotationConstantsD3D11;
 
 ID3D11ShaderResourceView * __egGetShaderResourceView ( ID3D11Texture2D * texture )
 {
@@ -102,12 +104,28 @@ struct EGMACRO
 public:
 	EGMACRO ( unsigned processingUnit, DXGI_FORMAT sourceFormat, DXGI_FORMAT destinationFormat, const char * shaderInfo )
 	{
+		ZeroMemory ( macro, sizeof ( macro ) );
+
 		_itoa_s ( g_processingUnitD3D11, itoaProcessingUnit, 10 );
 		macro [ 0 ] = { "SHADER_INFO", shaderInfo };
 		macro [ 1 ] = { "PROCESSINGUNIT", itoaProcessingUnit };
 		macro [ 2 ] = { "INPUT_FORMAT", __egGetSourceFormat ( sourceFormat ) };
 		macro [ 3 ] = { "OUTPUT_FORMAT", __egGetDestinationFormat ( destinationFormat ) };
 		macro [ 4 ] = { nullptr, nullptr };
+	}
+
+public:
+	void addMacro ( const char * name, const char * value )
+	{
+		for ( int i = 4; i < 16; ++i )
+		{
+			if ( macro [ i ].Name == nullptr )
+			{
+				macro [ i ].Name = name;
+				macro [ i ].Definition = value;
+				return;
+			}
+		}
 	}
 
 public:
@@ -130,7 +148,7 @@ public:
 	const D3D_SHADER_MACRO * getMacroArray () const { return macro; }
 
 private:
-	D3D_SHADER_MACRO macro [ 8 ];
+	D3D_SHADER_MACRO macro [ 16 ];
 	char itoaProcessingUnit [ 8 ];
 };
 ID3D11ComputeShader * __egGetShader ( const EGMACRO * macro )
@@ -296,6 +314,8 @@ void EASEL_DLL esUninitializeD3D11 ()
 		i->second->Release ();
 	g_srvsForTexture2D.clear ();
 
+	SAFE_RELEASE ( g_rotationConstantsD3D11 );
+
 	SAFE_RELEASE ( g_resizeSamplerLinear );
 	SAFE_RELEASE ( g_resizeSamplerNearest );
 
@@ -433,6 +453,27 @@ EASELERR EASEL_DLL esCreateCompatibleScaleTexture2D ( ID3D11Device * d3dDevice, 
 	original->GetDesc ( &texDesc );
 	texDesc.Width = ( UINT ) ( texDesc.Width * ( scale / 100.0f ) );
 	texDesc.Height = ( UINT ) ( texDesc.Height * ( scale / 100.0f ) );
+
+	if ( FAILED ( d3dDevice->CreateTexture2D ( &texDesc, nullptr, result ) ) )
+		return EASELERR_FAILED_INITIALIZE;
+
+	return EASELERR_SUCCEED;
+}
+
+EASELERR EASEL_DLL esCreateCompatibleRotationTexture2D ( ID3D11Device * d3dDevice, ID3D11Texture2D * original, EASEL_ROTATION rot, ID3D11Texture2D ** result )
+{
+	if ( d3dDevice == nullptr )
+		d3dDevice = g_d3dDevice;
+
+	D3D11_TEXTURE2D_DESC texDesc;
+	original->GetDesc ( &texDesc );
+
+	if ( rot == EASEL_ROTATION_90 || rot == EASEL_ROTATION_270 )
+	{
+		int width = texDesc.Width;
+		texDesc.Width = texDesc.Height;
+		texDesc.Height = width;
+	}
 
 	if ( FAILED ( d3dDevice->CreateTexture2D ( &texDesc, nullptr, result ) ) )
 		return EASELERR_FAILED_INITIALIZE;
@@ -798,6 +839,57 @@ EASELERR EASEL_DLL esDoArithmeticOperation ( ID3D11Texture2D * destination, ID3D
 	g_immediateContext->Dispatch (
 		( UINT ) ceill ( ( float ) srcDesc.Width / g_processingUnitD3D11 ),
 		( UINT ) ceill ( ( float ) srcDesc.Height / g_processingUnitD3D11 ),
+		1 );
+
+	return EASELERR_SUCCEED;
+}
+
+EASELERR EASEL_DLL esDoRotation ( ID3D11Texture2D * destination, ID3D11Texture2D * source, EASEL_ROTATION rot )
+{
+	D3D11_TEXTURE2D_DESC destDesc, srcDesc;
+	destination->GetDesc ( &destDesc );
+	source->GetDesc ( &srcDesc );
+
+	if ( rot == EASEL_ROTATION_0 && ( destDesc.Width == srcDesc.Width && destDesc.Height == srcDesc.Height ) )
+		return esDoCopyResource ( destination, source );
+
+	if ( !( rot == EASEL_ROTATION_180 && ( destDesc.Width == srcDesc.Width && destDesc.Height == srcDesc.Height ) ) )
+	{
+		if ( !( rot != EASEL_ROTATION_180 && ( destDesc.Width == srcDesc.Height && destDesc.Height == srcDesc.Width ) ) )
+			return EASELERR_INVALID_OBJECT;
+	}
+
+	if ( g_rotationConstantsD3D11 == nullptr )
+	{
+		D3D11_BUFFER_DESC constantBufferDesc = { 0, };
+		constantBufferDesc.ByteWidth = sizeof ( RotationArgs );
+		constantBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+		constantBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+
+		if ( FAILED ( g_d3dDevice->CreateBuffer ( &constantBufferDesc, nullptr, &g_rotationConstantsD3D11 ) ) )
+			return EASELERR_FAILED_INITIALIZE;
+	}
+
+	RotationArgs args = { rot, 0, 0, 0 };
+	g_immediateContext->UpdateSubresource ( g_rotationConstantsD3D11, 0, nullptr, &args, sizeof ( RotationArgs ), 0 );
+	
+	EGMACRO macro ( g_processingUnitD3D11, srcDesc.Format, destDesc.Format, "RotationOperation" );
+	ID3D11ComputeShader * computeShader = __egGetShader ( &macro );
+	if ( computeShader == nullptr ) return EASELERR_SHADER_COMPILE_ERROR;
+
+	g_immediateContext->CSSetShader ( computeShader, nullptr, 0 );
+	ID3D11ShaderResourceView * srv = __egGetShaderResourceView ( source );
+	if ( srv == nullptr ) return EASELERR_INVALID_OBJECT;
+	g_immediateContext->CSSetShaderResources ( 0, 1, &srv );
+	ID3D11UnorderedAccessView * uav = __egGetUnorderedAccessView ( destination );
+	if ( uav == nullptr ) return EASELERR_INVALID_OBJECT;
+	g_immediateContext->CSSetUnorderedAccessViews ( 0, 1, &uav, nullptr );
+	ID3D11Buffer * constantBuffer = g_rotationConstantsD3D11;
+	g_immediateContext->CSSetConstantBuffers ( 2, 1, &constantBuffer );
+	int largest = max ( srcDesc.Width, srcDesc.Height );
+	g_immediateContext->Dispatch (
+		( UINT ) ceill ( ( float ) largest / g_processingUnitD3D11 ),
+		( UINT ) ceill ( ( float ) largest / g_processingUnitD3D11 ),
 		1 );
 
 	return EASELERR_SUCCEED;

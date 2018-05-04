@@ -12,6 +12,10 @@ cbuffer ArithmeticOperation : register ( b1 )
 	float4 compute_color;
 	int compute_operator;
 };
+cbuffer RotationOperation : register ( b2 )
+{
+	int rotation;
+};
 static float filter_array [ 256 ] = ( float [ 256 ] ) filter;
 SamplerState samplerState : register ( s0 );
 RWStructuredBuffer<int> histogram : register ( u1 );
@@ -128,4 +132,31 @@ void ArithmeticOperation ( uint3 dispatchThreadId : SV_DispatchThreadID )
 	else if ( compute_operator == 3 )
 		outputTexture [ dispatchThreadId.xy ] = color / compute_color;
 }
+
+[numthreads ( PROCESSINGUNIT, PROCESSINGUNIT, 1 )]
+void RotationOperation ( uint3 dispatchThreadId : SV_DispatchThreadID )
+{
+	int2 textureSize;
+	inputTexture.GetDimensions ( textureSize.x, textureSize.y );
+
+	switch ( rotation )
+	{
+		case 1:
+			{
+				outputTexture [ dispatchThreadId.xy ] = inputTexture.Load ( int3 ( textureSize.x - dispatchThreadId.y - 1, dispatchThreadId.x, dispatchThreadId.z ) );
+			}
+			break;
+		case 2:
+			{
+				outputTexture [ dispatchThreadId.xy ] = inputTexture.Load ( int3 ( textureSize - dispatchThreadId.xy - int3 ( 1, 1, 0 ), dispatchThreadId.z ) );
+			}
+			break;
+		case 3:
+			{
+				outputTexture [ dispatchThreadId.xy ] = inputTexture.Load ( int3 ( dispatchThreadId.y, textureSize.y - dispatchThreadId.x - 1, dispatchThreadId.z ) );
+			}
+			break;
+	}
+}
+
 );
