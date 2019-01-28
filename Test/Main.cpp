@@ -1,51 +1,145 @@
-#define EASEL_D3D11
-#include <easel.h>
+#include <Easel.h>
+#pragma comment ( lib, "Daramee.Easel.lib" )
 
-#include <atlconv.h>
-#include <atlbase.h>
+int main ( void ) {
 
-int DoProgram ()
-{
-	CComPtr<ID3D11Texture2D> sampleTexture, targetTexture, resizeTexture;
-	if ( esLoadTexture2DFromFile ( nullptr, L"Sample.jpg", DXGI_FORMAT_B8G8R8A8_UNORM, &sampleTexture ) != EASELERR_SUCCEED )
-		return -2;
-	D3D11_TEXTURE2D_DESC desc;
-	sampleTexture->GetDesc ( &desc );
-	if ( esCreateCompatibleRotationTexture2D ( nullptr, sampleTexture, EASEL_ROTATION_270, &targetTexture ) != EASELERR_SUCCEED )
-		return -3;
-	/*if ( esCreateCompatibleScaleTexture2D ( nullptr, targetTexture, 75, &resizeTexture ) != EASELERR_SUCCEED )
-		return -4;
-
-	EASEL_FILTER filter = EASEL_FILTER::getSharpenFilter ( 100 );
-	if ( esDoFiltering ( targetTexture, sampleTexture, filter ) != EASELERR_SUCCEED )
-		return -5;
-
-	if ( esDoResize ( resizeTexture, targetTexture, EASEL_SAMPLING_LINEAR ) )
-		return -6;*/
-
-	//if ( esDoHistogramEqualization ( targetTexture, sampleTexture, nullptr ) )
-	//	return -7;
-	/*float color [] = { 1, 1, 1, 0.5f };
-	if ( esDoArithmeticOperation ( targetTexture, sampleTexture, color, EASEL_OPERATOR_MULTIPLY ) )
-		return -7;*/
-	if ( esDoRotation ( targetTexture, sampleTexture, EASEL_ROTATION_270 ) )
-		return -7;
-
-	if ( esSaveTexture2DToFile ( nullptr, L"Result.png", /*resizeTexture*/targetTexture ) != EASELERR_SUCCEED )
-		return -8;
-
-	return 0;
-}
-
-int main ( int argc, char ** argv )
-{
 	CoInitialize ( nullptr );
-	esInitializeD3D11 ();
+	{
+		CComPtr<easel::EaselFactory> factory;
+		if ( FAILED ( easel::CreateEaselFactoryD3D11 ( &factory ) ) )
+			return -1;
 
-	int ret = DoProgram ();
+		CComPtr<easel::Bitmap> image, proceed;
+		if ( FAILED ( factory->CreateBitmapFromFile ( L"Resources/6.jpg", &image ) ) )
+			return -2;
+		factory->Show ( image, "Loaded Image" );
 
-	esUninitializeD3D11 ();
+		if ( FAILED ( factory->CreateBitmap ( image->Width (), image->Height (), &proceed ) ) )
+			return -3;
+
+		{
+			CComPtr<easel::GammaSpaceBitmapProcessor> gamma;
+			if ( FAILED ( factory->CreateGammaSpaceProcessor ( &gamma ) ) )
+				return -4;
+			gamma->SetGammaValue ( 2.2f, false );
+
+			gamma->Process ( proceed, image );
+			factory->Swap ( image, proceed );
+
+			factory->Show ( image, "From Gamma Space" );
+		}
+
+		{
+			CComPtr<easel::BitmapProcessor> rgb2yuv;
+			if ( FAILED ( factory->CreateRGB2YUVProcessor ( &rgb2yuv ) ) )
+				return -5;
+
+			if ( !rgb2yuv->Process ( proceed, image ) )
+				return -6;
+			factory->Swap ( image, proceed );
+
+			factory->Show ( image, "RGB to YUV" );
+		}
+
+		int histogram [ 256 ];
+		{
+			/**/CComPtr<easel::BitmapHistogramExtractor> histogramExtractor;
+			if ( FAILED ( factory->CreateHistogramExtractor ( &histogramExtractor ) ) )
+				return -7;
+
+			histogramExtractor->SetBitmap ( image, true );
+
+			if ( !histogramExtractor->Generate ( histogram ) )
+				return -8;/**/
+
+			/*CComPtr<easel::ThresholdHistogramGenerator> histogramGenerator;
+			if ( FAILED ( factory->CreateThresholdGenerator ( &histogramGenerator ) ) )
+				return -7;
+
+			easel::Threshold thresholds [] = {
+				{ 0, 80 },
+				{ 50, 40 },
+				{ 255, 135 },
+			};
+			histogramGenerator->SetThreshold ( thresholds, _countof ( thresholds ) );
+
+			if ( !histogramGenerator->Generate ( histogram ) )
+				return -8;/**/
+		}
+
+		{
+			CComPtr<easel::HistogramBitmapProcessor> histogramProcessor;
+			if ( FAILED ( factory->CreateHistogramProcessor ( &histogramProcessor ) ) )
+				return -9;
+
+			histogramProcessor->SetHistogram ( histogram );
+			if ( !histogramProcessor->Process ( proceed, image ) )
+				return -10;
+			factory->Swap ( image, proceed );
+
+			factory->Show ( image, "Histogram Equalization" );
+		}
+
+		{
+			CComPtr<easel::FilterBitmapProcessor> filterProcessor;
+			if ( FAILED ( factory->CreateFilterProcessor ( &filterProcessor ) ) )
+				return -11;
+
+			easel::Filter filter = easel::Filter::GetSharpenFilter ();
+			filterProcessor->SetFilter ( filter );
+
+			if ( !filterProcessor->Process ( proceed, image ) )
+				return -12;
+			factory->Swap ( image, proceed );
+
+			factory->Show ( image, "Sharpen Filtering" );
+		}
+
+		{
+			CComPtr<easel::BitmapProcessor> saturateProcessor;
+			if ( FAILED ( factory->CreateSaturateProcessor ( &saturateProcessor ) ) )
+				return -13;
+
+			if ( !saturateProcessor->Process ( proceed, image ) )
+				return -14;
+			factory->Swap ( image, proceed );
+
+			factory->Show ( image, "Saturate" );
+		}
+
+		{
+			CComPtr<easel::BitmapProcessor> yuv2rgb;
+			if ( FAILED ( factory->CreateYUV2RGBProcessor ( &yuv2rgb ) ) )
+				return -15;
+
+			if ( !yuv2rgb->Process ( proceed, image ) )
+				return -16;
+			factory->Swap ( image, proceed );
+
+			factory->Show ( image, "YUV to RGB" );
+		}
+
+		{
+			CComPtr<easel::GammaSpaceBitmapProcessor> gamma;
+			if ( FAILED ( factory->CreateGammaSpaceProcessor ( &gamma ) ) )
+				return -4;
+			gamma->SetGammaValue ( 2.2f, true );
+
+			gamma->Process ( proceed, image );
+			factory->Swap ( image, proceed );
+
+			factory->Show ( image, "To Gamma Space" );
+		}
+
+		{
+			CComPtr<IStream> outputStream;
+			if ( FAILED ( SHCreateStreamOnFile ( L"1.jpg", STGM_WRITE | STGM_CREATE, &outputStream ) ) )
+				return -17;
+			if ( FAILED ( image->Encode ( outputStream ) ) )
+				return -18;
+		}
+	}
 	CoUninitialize ();
 
-	return ret;
+	return 0;
 }
