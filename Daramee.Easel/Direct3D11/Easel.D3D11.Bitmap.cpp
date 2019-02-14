@@ -67,6 +67,20 @@ HRESULT easel::d3d11::D3D11Bitmap::Encode ( IStream * stream, float quality )
 	if ( FAILED ( encoderOptions->Write ( 0, &propBag2, &variant ) ) )
 		return E_FAIL;
 
+	propBag2.pstrName = ( LPOLESTR ) L"JpegYCrCbSubsampling";
+	VariantInit ( &variant );
+	variant.vt = VT_UI1;
+	variant.bVal = WICJpegYCrCbSubsampling420;
+	if ( FAILED ( encoderOptions->Write ( 1, &propBag2, &variant ) ) )
+		return E_FAIL;
+
+	propBag2.pstrName = ( LPOLESTR ) L"SuppressApp0";
+	VariantInit ( &variant );
+	variant.vt = VT_BOOL;
+	variant.intVal = FALSE;
+	if ( FAILED ( encoderOptions->Write ( 1, &propBag2, &variant ) ) )
+		return E_FAIL;
+
 	if ( FAILED ( frameEncode->Initialize ( encoderOptions ) ) )
 		return E_FAIL;
 
@@ -91,7 +105,8 @@ HRESULT easel::d3d11::D3D11Bitmap::Encode ( IStream * stream, float quality )
 	if ( SUCCEEDED ( _factory->_immediateContext->Map ( copyTex, 0, D3D11_MAP_READ, 0, &subres ) ) )
 	{
 		CComPtr<IWICBitmap> bitmap;
-		if ( SUCCEEDED ( _factory->_wicImagingFactory->CreateBitmap ( Width (), Height (), GUID_WICPixelFormat128bppRGBAFloat, WICBitmapCacheOnDemand, &bitmap ) ) )
+		if ( SUCCEEDED ( _factory->_wicImagingFactory->CreateBitmap ( Width (), Height (),
+			GUID_WICPixelFormat128bppRGBAFloat, WICBitmapCacheOnDemand, &bitmap ) ) )
 		{
 			CComPtr<IWICBitmapLock> lock;
 			if ( SUCCEEDED ( bitmap->Lock ( nullptr, WICBitmapLockWrite, &lock ) ) )

@@ -164,7 +164,7 @@ HRESULT easel::d3d11::D3D11EaselFactory::CopyBitmap ( easel::Bitmap * destinatio
 	return S_OK;
 }
 
-void easel::d3d11::D3D11EaselFactory::Swap ( easel::Bitmap * _b1, easel::Bitmap * _b2 )
+void easel::d3d11::D3D11EaselFactory::SwapBitmaps ( easel::Bitmap * _b1, easel::Bitmap * _b2 )
 {
 	if ( _b1 == nullptr || _b2 == nullptr )
 		return;
@@ -273,6 +273,12 @@ HRESULT easel::d3d11::D3D11EaselFactory::CreateYUV2RGBProcessor ( easel::BitmapP
 HRESULT easel::d3d11::D3D11EaselFactory::CreateRGB2GrayscaleProcessor ( easel::BitmapProcessor ** processor )
 {
 	return CreateComputeShaderProcessor ( L"RGB2GrayscaleConvertShader.cso", false, 0,
+		( easel::ComputeShaderBitmapProcessor ** ) processor );
+}
+
+HRESULT easel::d3d11::D3D11EaselFactory::CreateRGB888SpaceToRGB565Space ( BitmapProcessor ** processor )
+{
+	return CreateComputeShaderProcessor ( L"RGB8882RGB565ConvertShader.cso", false, 0,
 		( easel::ComputeShaderBitmapProcessor ** ) processor );
 }
 

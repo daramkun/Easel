@@ -1,7 +1,8 @@
 #include "../Easel.h"
 #include "Easel.D3D11.Internal.h"
 
-easel::d3d11::D3D11ComputeShaderProcessor::D3D11ComputeShaderProcessor ( D3D11EaselFactory * factory, ID3D11ComputeShader * computeShader, ID3D11Buffer * constantBuffer, UINT constantBufferSize )
+easel::d3d11::D3D11ComputeShaderProcessor::D3D11ComputeShaderProcessor ( D3D11EaselFactory * factory, ID3D11ComputeShader * computeShader,
+	ID3D11Buffer * constantBuffer, UINT constantBufferSize )
 	: _refCount ( 1 ), _factory ( factory )
 	, _shader ( computeShader ), _constantBuffer ( constantBuffer ), _constantBufferSize ( constantBufferSize )
 {

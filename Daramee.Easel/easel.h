@@ -31,7 +31,7 @@ namespace easel
 		virtual HRESULT CreateBitmap ( UINT width, UINT height, easel::Bitmap ** bitmap ) PURE;
 		virtual HRESULT CreateBitmapFromFile ( LPCWSTR filename, Bitmap ** bitmap ) PURE;
 		virtual HRESULT CopyBitmap ( Bitmap * destination, Bitmap * source ) PURE;
-		virtual void Swap ( Bitmap * b1, Bitmap * b2 ) PURE;
+		virtual void SwapBitmaps ( Bitmap * b1, Bitmap * b2 ) PURE;
 
 	public:
 		virtual HRESULT CreateComputeShaderProcessor ( LPCSTR shaderCode, bool useConstantBuffer, int constantBufferSize, ComputeShaderBitmapProcessor ** processor ) PURE;
@@ -41,6 +41,7 @@ namespace easel
 		virtual HRESULT CreateRGB2YUVProcessor ( BitmapProcessor ** processor ) PURE;
 		virtual HRESULT CreateYUV2RGBProcessor ( BitmapProcessor ** processor ) PURE;
 		virtual HRESULT CreateRGB2GrayscaleProcessor ( BitmapProcessor ** processor ) PURE;
+		virtual HRESULT CreateRGB888SpaceToRGB565Space ( BitmapProcessor ** processor ) PURE;
 
 		virtual HRESULT CreateFilterProcessor ( FilterBitmapProcessor ** processor ) PURE;
 		virtual HRESULT CreateGammaSpaceProcessor ( GammaSpaceBitmapProcessor ** processor ) PURE;

@@ -30,5 +30,6 @@
     <FxCompile Include="Shaders\RGB2GrayscaleConvertShader.hlsl" />
     <FxCompile Include="Shaders\GammaSpaceShader.hlsl" />
     <FxCompile Include="Shaders\SaturateShader.hlsl" />
+    <FxCompile Include="Shaders\RGB8882RGB565ConvertShader.hlsl" />
   </ItemGroup>
 </Project>

@@ -43,7 +43,8 @@ namespace easel
 		class D3D11ComputeShaderProcessor : public easel::ComputeShaderBitmapProcessor
 		{
 		public:
-			D3D11ComputeShaderProcessor ( D3D11EaselFactory * factory, ID3D11ComputeShader * computeShader, ID3D11Buffer * constantBuffer, UINT constantBufferSize );
+			D3D11ComputeShaderProcessor ( D3D11EaselFactory * factory, ID3D11ComputeShader * computeShader, 
+				ID3D11Buffer * constantBuffer, UINT constantBufferSize );
 
 		public:
 			virtual HRESULT __stdcall QueryInterface ( REFIID riid, void ** ppvObject ) override;
@@ -330,26 +331,30 @@ namespace easel
 			virtual HRESULT CreateBitmap ( UINT width, UINT height, easel::Bitmap ** bitmap ) override;
 			virtual HRESULT CreateBitmapFromFile ( LPCWSTR filename, easel::Bitmap ** bitmap ) override;
 			virtual HRESULT CopyBitmap ( easel::Bitmap * destination, easel::Bitmap * source ) override;
-			virtual void Swap ( easel::Bitmap * _b1, easel::Bitmap * _b2 ) override;
+			virtual void SwapBitmaps ( easel::Bitmap * _b1, easel::Bitmap * _b2 ) override;
 
+		public:
 			virtual HRESULT CreateComputeShaderProcessor ( LPCSTR shaderCode, bool useConstantBuffer, int constantBufferSize, easel::ComputeShaderBitmapProcessor ** processor ) override;
 			virtual HRESULT CreateComputeShaderProcessor ( LPCWSTR filename, bool useConstantBuffer, int constantBufferSize, easel::ComputeShaderBitmapProcessor ** processor ) override;
-			
+
 			virtual HRESULT CreateSaturateProcessor ( easel::BitmapProcessor ** processor ) override;
 			virtual HRESULT CreateRGB2YUVProcessor ( easel::BitmapProcessor ** processor ) override;
 			virtual HRESULT CreateYUV2RGBProcessor ( easel::BitmapProcessor ** processor ) override;
 			virtual HRESULT CreateRGB2GrayscaleProcessor ( easel::BitmapProcessor ** processor ) override;
-			
+			virtual HRESULT CreateRGB888SpaceToRGB565Space ( BitmapProcessor ** processor ) override;
+
 			virtual HRESULT CreateFilterProcessor ( easel::FilterBitmapProcessor ** processor ) override;
 			virtual HRESULT CreateGammaSpaceProcessor ( easel::GammaSpaceBitmapProcessor ** processor ) override;
 			virtual HRESULT CreateRotationProcessor ( easel::RotationBitmapProcessor ** processor ) override;
 			virtual HRESULT CreateResizeProcessor ( easel::ResizeBitmapProcessor ** processor ) override;
 			virtual HRESULT CreateArithmeticProcessor ( easel::ArithmeticBitmapProcessor ** processor ) override;
-			
 			virtual HRESULT CreateHistogramProcessor ( easel::HistogramBitmapProcessor ** processor ) override;
+
+		public:
 			virtual HRESULT CreateHistogramExtractor ( easel::BitmapHistogramExtractor ** generator ) override;
 			virtual HRESULT CreateThresholdGenerator ( easel::ThresholdHistogramGenerator ** generator ) override;
 
+		public:
 			virtual void Show ( easel::Bitmap * bitmap, LPCSTR title ) override;
 
 		private:
